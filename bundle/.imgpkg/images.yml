@@ -1,0 +1,13 @@
+---
+apiVersion: imgpkg.carvel.dev/v1alpha1
+images:
+- annotations:
+    kbld.carvel.dev/id: gitlab/gitlab-runner:ubuntu
+  image: index.docker.io/gitlab/gitlab-runner@sha256:28d0d3f0faaa542b242df9e2ec95b2e3e3701cebde20bf68f098ad98f5df9ec4
+- annotations:
+    kbld.carvel.dev/id: gitlab/gitlab-runner:ubuntu-v14.3.0
+  image: index.docker.io/gitlab/gitlab-runner@sha256:2ed4b52db6f9ce0b6f07ee1a0e87013befa38940e00df95f0dbc6ecda4de2066
+- annotations:
+    kbld.carvel.dev/id: registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:ubuntu-x86_64-v14.3.0
+  image: registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper@sha256:086bac91e2f392d06c5353e85e9cc4e63e158428d5c90c42c759581b5a5aea3f
+kind: ImagesLock

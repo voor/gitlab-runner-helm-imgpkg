@@ -1,0 +1,13 @@
+apiVersion: vendir.k14s.io/v1alpha1
+directories:
+- contents:
+  - helmChart:
+      appVersion: 14.3.0
+      version: 0.33.0
+    path: .
+  path: bundle/chart
+- contents:
+  - directory: {}
+    path: .
+  path: bundle/config
+kind: LockConfig

@@ -1,0 +1,181 @@
+#@ load("@ytt:data", "data")
+#@ load("@ytt:overlay", "overlay")
+
+#@ if data.values.makeNamespace:
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: #@ data.values.namespace
+  annotations:
+    iam.amazonaws.com/permitted: ".*"
+#@ end
+---
+
+#@overlay/match by=overlay.not_op(overlay.or_op(overlay.subset({"kind": "ServiceMonitor"}), overlay.subset({"kind": "Namespace"}))),expects="0+"
+---
+#@overlay/match missing_ok=True
+metadata:
+  #@overlay/match missing_ok=True
+  namespace: #@ data.values.namespace
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: #@ "{}-helper-image".format(data.values.helper_image_reference)
+  labels:
+    purpose: kbld-image-helping
+  #@overlay/match missing_ok=True
+  annotations:
+    #@overlay/match missing_ok=True
+    kapp.k14s.io/versioned: ""
+    #@overlay/match missing_ok=True
+    kapp.k14s.io/num-versions: "3"
+data:
+  KUBERNETES_HELPER_IMAGE: #@ "registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:ubuntu-x86_64-v{}".format(data.values.chartInfo.appVersion)
+  KUBERNETES_IMAGE: #@ "gitlab/gitlab-runner:ubuntu-v{}".format(data.values.chartInfo.appVersion)
+  RUNNER_TAG_LIST: #@ ",".join([x.strip() for x in data.values.tags])
+
+---
+
+#@ def kbld_label():
+metadata:
+  labels:
+    purpose: kbld-image-helping
+#@ end
+
+#@overlay/match by=overlay.and_op(overlay.subset({"kind": "ConfigMap"}),overlay.not_op(overlay.subset(kbld_label())))
+---
+metadata:
+  #@overlay/match missing_ok=True
+  annotations:
+    #@overlay/match missing_ok=True
+    kapp.k14s.io/versioned: ""
+    #@overlay/match missing_ok=True
+    kapp.k14s.io/num-versions: "3"
+data:
+  #@overlay/replace
+  #@yaml/text-templated-strings
+  register-the-runner: |
+    #!/bin/bash
+    MAX_REGISTER_ATTEMPTS=30
+
+    for i in $(seq 1 "${MAX_REGISTER_ATTEMPTS}"); do
+      echo "Registration attempt ${i} of ${MAX_REGISTER_ATTEMPTS}"
+      /entrypoint register \
+        --tls-ca-file /home/gitlab-runner/.gitlab-runner/certs/certificates.crt \
+        --template-config /configmaps/config.template.toml \
+        --non-interactive
+
+      retval=$?
+
+      if [ ${retval} = 0 ]; then
+        break
+      elif [ ${i} = ${MAX_REGISTER_ATTEMPTS} ]; then
+        exit 1
+      fi
+
+      sleep 5
+    done
+
+    exit 0
+  #@overlay/replace
+  #@yaml/text-templated-strings
+  config.template.toml: |
+    [[runners]]
+      environment = ["GIT_SSL_NO_VERIFY=true"]
+      tls-ca-file = "/home/gitlab-runner/.gitlab-runner/certs/certificates.crt"
+      [runners.cache]
+        Type = "s3"
+        Path = "gitlab-runner-cache"
+        Shared = false
+        [runners.cache.s3]
+          BucketName = "(@= data.values.runner.s3.bucket @)"
+          BucketLocation = "(@= data.values.aws.region @)"
+      [runners.kubernetes]
+        pod_annotations_overwrite_allowed = ".*"
+  #@overlay/replace
+  #@yaml/text-templated-strings
+  config.toml: |
+    concurrent = 5
+    check_interval = 30
+    log_level = "info"
+    listen_address = ':9252'
+
+    [[runners]]
+      tls-ca-file = "/home/gitlab-runner/.gitlab-runner/certs/certificates.crt"
+      environment = ["GIT_SSL_NO_VERIFY=true"]
+      [runners.kubernetes]
+        image = ${KUBERNETES_IMAGE}
+        helper_image = ${KUBERNETES_HELPER_IMAGE}
+        namespace = ${KUBERNETES_NAMESPACE}
+        pod_annotations_overwrite_allowed = ".*"
+
+  #! Does not actually do an overlay, it replaces the specific instance of this command with a sed script instead.
+  #@overlay/replace via=lambda left, right: left.replace("cp /configmaps/config.toml /home/gitlab-runner/.gitlab-runner/", right)
+  entrypoint: |
+    sed -e "s|\${KUBERNETES_IMAGE}|\"${KUBERNETES_IMAGE}\"|" \
+      -e "s|\${KUBERNETES_HELPER_IMAGE}|\"${KUBERNETES_HELPER_IMAGE}\"|" \
+      -e "s|\${KUBERNETES_NAMESPACE}|\"${KUBERNETES_NAMESPACE}\"|" \
+      /configmaps/config.toml >/home/gitlab-runner/.gitlab-runner/config.toml
+
+#@overlay/match by=overlay.subset({"kind": "Deployment"})
+---
+spec:
+  template:
+    spec:
+      containers:
+      #@overlay/match by=overlay.all
+      -
+        #@overlay/match missing_ok=True
+
+        env:
+        #@overlay/match by="name"
+        #@overlay/remove
+        - name: RUNNER_TAG_LIST
+        #@overlay/append
+        #@overlay/match by="name"
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        #@overlay/match missing_ok=True
+        envFrom:
+        - configMapRef:
+            name: #@ "{}-helper-image".format(data.values.helper_image_reference)
+      initContainers:
+      #@overlay/match by=overlay.all
+      -
+        #@overlay/match missing_ok=True
+        env:
+        #@overlay/match by="name"
+        #@overlay/remove
+        - name: RUNNER_TAG_LIST
+        #@overlay/append
+        #@overlay/match by="name"
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        #@overlay/match missing_ok=True
+        envFrom:
+        - configMapRef:
+            name: #@ "{}-helper-image".format(data.values.helper_image_reference)
+
+---
+apiVersion: kbld.k14s.io/v1alpha1
+kind: Config
+minimumRequiredVersion: 0.24.0
+searchRules:
+- keyMatcher:
+    path: [data, KUBERNETES_HELPER_IMAGE]
+- keyMatcher:
+    path: [data, KUBERNETES_IMAGE]
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: custom-certificates
+stringData:
+  certificates.crt: #@ data.values.ci_server_tls_ca

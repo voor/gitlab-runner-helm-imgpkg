@@ -1,0 +1,6 @@
+---
+apiVersion: imgpkg.carvel.dev/v1alpha1
+bundle:
+  image: gcr.io/pa-rvanvoorhees/charts/gitlab-runner/imgpkg/charts/gitlab-runner@sha256:0a901be2cd24289a7722a94d5e0fc26452026e9bc7738d25ed41f5ea4f09e782
+  tag: 0.33.0
+kind: BundleLock

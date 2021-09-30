@@ -1,0 +1,58 @@
+#@data/values
+---
+
+
+imagePullPolicy: IfNotPresent
+terminationGracePeriodSeconds: 3600
+concurrent: 10
+checkInterval: 30
+rbac:
+  create: true
+  rules: []
+  clusterWideAccess: false
+  podSecurityPolicy:
+    enabled: false
+    resourceNames:
+    - gitlab-runner
+metrics:
+  enabled: true
+runners:
+  config: |
+    [[runners]]
+      [runners.kubernetes]
+        namespace = "{{.Release.Namespace}}"
+        image = "ubuntu:16.04"
+  cache: {}
+  builds: {}
+  services: {}
+  helpers: {}
+securityContext:
+  runAsUser: 999
+  fsGroup: 999
+resources: {}
+affinity: {}
+nodeSelector: {}
+tolerations: []
+hostAliases: []
+podAnnotations:
+  iam.amazonaws.com/role: .*
+podLabels: {}
+secrets: []
+configMaps: {}
+certsSecretName: custom-certificates
+image: gitlab/gitlab-runner:ubuntu
+makeNamespace: false
+namespace: whereIgetinstalled
+helper_image_reference: this_just_needs_to_be_unique
+aws:
+  region: ""
+runner:
+  s3:
+    bucket: ""
+pod_role: null
+tags: []
+gitlabUrl: null
+runnerRegistrationToken: null
+ci_server_tls_ca: null
+chartInfo:
+  appVersion: 14.3.0

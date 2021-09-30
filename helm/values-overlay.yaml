@@ -1,0 +1,53 @@
+#! This is an overlay that
+#!  is applied to the values file in the helm chart to make sure that sensible
+#!  defaults for our organization are applied without needing to be populated at runtime.
+
+#@ load("@ytt:data", "data")
+#@ load("@ytt:overlay", "overlay")
+
+#@overlay/match by=overlay.all
+---
+
+#@overlay/match missing_ok=True
+certsSecretName: custom-certificates
+
+#@overlay/match missing_ok=True
+image: gitlab/gitlab-runner:ubuntu
+
+rbac:
+  create: true
+
+securityContext:
+  runAsUser: 999
+  fsGroup: 999
+
+#! Start custom YTT variables.  These will be available in the ytt phase along with the helm values.
+#! ------------------------------------------
+#@overlay/match by=overlay.all
+#@overlay/match-child-defaults missing_ok=True
+---
+
+makeNamespace: false
+
+namespace: whereIgetinstalled #! Should match the helm chart namespace.
+
+helper_image_reference: this_just_needs_to_be_unique #! If we install multiple runners per namespace they'll collide.
+
+aws:
+  region: ""
+
+runner:
+  s3:
+    bucket: ""
+#! This value intentionally left blank
+pod_role:
+
+podAnnotations:
+  iam.amazonaws.com/role: ".*"
+
+tags: []
+
+gitlabUrl:
+runnerRegistrationToken:
+
+ci_server_tls_ca:
